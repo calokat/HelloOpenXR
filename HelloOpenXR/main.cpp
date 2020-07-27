@@ -56,6 +56,8 @@ std::map<uint32_t, uint32_t> m_colorToDepthMap;
 
 GLuint m_swapchainFramebuffer;
 GLuint m_program;
+unsigned int rbo;
+GLuint texture;
 
 GLFWwindow* m_window;
 
@@ -234,9 +236,6 @@ void PollEvent(bool* exitRenderLoop, bool* requestRestart)
 		switch (event->type) {
 		case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING: {
 			const auto& instanceLossPending = *reinterpret_cast<const XrEventDataInstanceLossPending*>(event);
-			//Log::Write(Log::Level::Warning, Fmt("XrEventDataInstanceLossPending by %lld", instanceLossPending.lossTime));
-			//*exitRenderLoop = true;
-			//*requestRestart = true;
 			return;
 		}
 		case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED: {
@@ -247,7 +246,6 @@ void PollEvent(bool* exitRenderLoop, bool* requestRestart)
 		case XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED:
 		case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
 		default: {
-			//Log::Write(Log::Level::Verbose, Fmt("Ignoring event type %d", event->type));
 			std::cout << "Ignoring event type " << event->type << std::endl;
 			break;
 		}
@@ -269,6 +267,7 @@ uint32_t GetDepthTexture(uint32_t colorTexture) {
 	glBindTexture(GL_TEXTURE_2D, colorTexture);
 	glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
 	glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
+	glBindTexture(GL_TEXTURE_2D, 0);
 
 	uint32_t depthTexture;
 	glGenTextures(1, &depthTexture);
@@ -278,16 +277,36 @@ uint32_t GetDepthTexture(uint32_t colorTexture) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-
+	
 	m_colorToDepthMap.insert(std::make_pair(colorTexture, depthTexture));
 
 	return depthTexture;
 }
 
+uint32_t SetDepth(uint32_t colorTexture)
+{
+	GLint width;
+	GLint height;
+	//glBindTexture(GL_TEXTURE_2D, colorTexture);
+	glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
+	glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
+	//glBindTexture(GL_TEXTURE_2D, 0);
+
+	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+	//glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+	//glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+
+	return rbo;
+}
+
 void RenderScene(XrCompositionLayerProjectionView view)
 {
 	XrMatrix4x4f projection;
-	//projection = glm::perspective(glm::radians(Zoom), 800.0f / 600.0f, 0.1f, 100.0f);
 
 	XrMatrix4x4f_CreateProjectionFov(&projection, GraphicsAPI::GRAPHICS_OPENGL, view.fov, .5f, 100);
 
@@ -305,7 +324,6 @@ void RenderScene(XrCompositionLayerProjectionView view)
 	glm::mat4 model(1.0f);
 
 	GLint modelLoc = glGetUniformLocation(m_program, "model");
-	//glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
 	GLint viewLoc = glGetUniformLocation(m_program, "view");
 	glUniformMatrix4fv(viewLoc, 1, GL_FALSE, viewMat.m);
 	GLint projLoc = glGetUniformLocation(m_program, "projection");
@@ -339,17 +357,35 @@ void RenderView(const XrCompositionLayerProjectionView& layerView, const XrSwapc
 
 
 
-	glFrontFace(GL_CW);
-	glCullFace(GL_BACK);
-	glEnable(GL_CULL_FACE);
+	//glFrontFace(GL_CW);
+	//glCullFace(GL_BACK);
+	//glEnable(GL_CULL_FACE);
 	glEnable(GL_DEPTH_TEST);
 
-
+	GLuint depthTexture = GetDepthTexture(colorTexture);
+	
+	glBindTexture(GL_TEXTURE_2D, texture);
+	
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTexture, 0);
+
+	//uint32_t renderBuffer = SetDepth(colorTexture);
+	//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+	//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTexture, 0);
+
+	//glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, renderBuffer);
+	
+	GLenum err = glGetError();
+	//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTexture, 0);
+	GLenum fbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if (fbStatus != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+	//glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 
 	glClearColor(1, 1, 1, 1);
 	glClearDepth(1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 
 	RenderScene(layerView);
@@ -376,54 +412,11 @@ bool RenderLayer(XrTime predictedDisplayTime, std::vector<XrCompositionLayerProj
 	viewLocateInfo.space = m_appSpace;
 
 	res = xrLocateViews(m_session, &viewLocateInfo, &viewState, viewCapacityInput, &viewCountOutput, m_views.data());
-	//CHECK_XRRESULT(res, "xrLocateViews");
 	if (XR_UNQUALIFIED_SUCCESS(res)) {
 		bool r1 = (viewCountOutput == viewCapacityInput);
-		//bool r2 = (viewCountOutput == m_configViews.size());
 		bool r3 =(viewCountOutput == m_swapchains.size());
 
 		projectionLayerViews.resize(viewCountOutput);
-
-		// For each locatable space that we want to visualize, render a 25cm cube.
-		//std::vector<Cube> cubes;
-
-		//for (XrSpace visualizedSpace : m_visualizedSpaces) {
-		//	XrSpaceLocation spaceLocation{ XR_TYPE_SPACE_LOCATION };
-		//	res = xrLocateSpace(visualizedSpace, m_appSpace, predictedDisplayTime, &spaceLocation);
-		//	CHECK_XRRESULT(res, "xrLocateSpace");
-		//	if (XR_UNQUALIFIED_SUCCESS(res)) {
-		//		if ((spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-		//			(spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-		//			cubes.push_back(Cube{ spaceLocation.pose, {0.25f, 0.25f, 0.25f} });
-		//		}
-		//	}
-		//	else {
-		//		Log::Write(Log::Level::Verbose, Fmt("Unable to locate a visualized reference space in app space: %d", res));
-		//	}
-		//}
-
-		// Render a 10cm cube scaled by grabAction for each hand. Note renderHand will only be
-		// true when the application has focus.
-		//for (auto hand : { Side::LEFT, Side::RIGHT }) {
-		//	XrSpaceLocation spaceLocation{ XR_TYPE_SPACE_LOCATION };
-		//	res = xrLocateSpace(m_input.handSpace[hand], m_appSpace, predictedDisplayTime, &spaceLocation);
-		//	//CHECK_XRRESULT(res, "xrLocateSpace");
-		//	if (XR_UNQUALIFIED_SUCCESS(res)) {
-		//		if ((spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-		//			(spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-		//			float scale = 0.1f * m_input.handScale[hand];
-		//			cubes.push_back(Cube{ spaceLocation.pose, {scale, scale, scale} });
-		//		}
-		//	}
-		//	else {
-		//		// Tracking loss is expected when the hand is not active so only log a message
-		//		// if the hand is active.
-		//		if (m_input.handActive[hand] == XR_TRUE) {
-		//			const char* handName[] = { "left", "right" };
-		//		}
-		//	}
-		//}
-
 		// Render view to the appropriate part of the swapchain image.
 		for (uint32_t i = 0; i < viewCountOutput; i++) {
 			// Each view has a separate swapchain which is acquired, rendered to, and released.
@@ -448,108 +441,6 @@ bool RenderLayer(XrTime predictedDisplayTime, std::vector<XrCompositionLayerProj
 			const XrSwapchainImageBaseHeader* const swapchainImage =
 				m_swapchainImages[viewSwapchain.handle][swapchainImageIndex];
 			RenderView(projectionLayerViews[i], swapchainImage);
-			//glBindFramebuffer(GL_FRAMEBUFFER, m_swapchainFramebuffer);
-
-
-			//const uint32_t colorTexture = reinterpret_cast<const XrSwapchainImageOpenGLKHR*>(swapchainImage)->image;
-
-			//glViewport(static_cast<GLint>(projectionLayerViews[i].subImage.imageRect.offset.x),
-			//	static_cast<GLint>(projectionLayerViews[i].subImage.imageRect.offset.y),
-			//	static_cast<GLsizei>(projectionLayerViews[i].subImage.imageRect.extent.width),
-			//	static_cast<GLsizei>(projectionLayerViews[i].subImage.imageRect.extent.height));
-
-			//glFrontFace(GL_CW);
-			//glCullFace(GL_BACK);
-			//glEnable(GL_CULL_FACE);
-			//glEnable(GL_DEPTH_TEST);
-
-			
-
-			//const uint32_t depthTexture = GetDepthTexture(colorTexture);
-			//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
-			//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTexture, 0);
-
-			//glClearDepth(1.0f);
-			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-			
-			//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
-
-			//m_graphicsPlugin->RenderView(projectionLayerViews[i], swapchainImage, m_colorSwapchainFormat, cubes);
-			// create the matrices
-			//glm::mat4 model(1.0f);
-			//model = glm::rotate(model, glm::radians(-180.0f), glm::vec3(1, 0, 0));
-			//model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
-			//glm::mat4 view = glm::mat4(1.0f);
-			// note that we're translating the scene in the reverse direction of where we want to move
-			//view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
-			//XrMatrix4x4f projection;
-			//projection = glm::perspective(glm::radians(Zoom), 800.0f / 600.0f, 0.1f, 100.0f);
-			//XrMatrix4x4f_CreateProjectionFov(&projection, GraphicsAPI::GRAPHICS_OPENGL, projectionLayerViews[i].fov, .5f, 100);
-			//XrMatrix4x4f toView;
-			//
-			//
-			//XrPosef pose = projectionLayerViews[i].pose;
-			//
-			//
-			//XrVector3f scale = { 1.f, 1.f, 1.f };
-			//
-			//
-			//XrMatrix4x4f_CreateTranslationRotationScale(&toView, &pose.position, &pose.orientation, &scale);
-			//
-			//XrMatrix4x4f view;
-			//
-			//
-			//XrMatrix4x4f_InvertRigidBody(&view, &toView);
-			//
-			//XrMatrix4x4f vp;
-			//
-			//
-			//XrMatrix4x4f_Multiply(&vp, &projection, &view);
-			//GLint modelLoc = glGetUniformLocation(m_program, "model");
-			//glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-			//GLint viewLoc = glGetUniformLocation(m_program, "view");
-			//glUniformMatrix4fv(viewLoc, 1, GL_FALSE, view.m);
-			//GLint projLoc = glGetUniformLocation(m_program, "projection");
-			//glUniformMatrix4fv(projLoc, 1, GL_FALSE, projection.m);
-			//view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-			//view = calculate_lookAt_matrix(cameraPos, cameraPos + cameraFront, glm::vec3(0.0f, 1.0f, 0.0f));
-			//view = glm::inverse(view);
-			//view = view * (glm::transpose((glm::mat4(0, 0, 0, -cameraPos.x, 0, 0, 0, -cameraPos.y, 0, 0, 0, cameraPos.z, 0, 0, 0, 1))));
-			//glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-			//projection = glm::perspective(glm::radians(Zoom), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
-			//glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-			//for (unsigned int j = 0; j < 10; j++)
-			//{
-			//	glm::mat4 model = glm::mat4(1.0f);
-			//	model = glm::translate(model, cubePositions[j]);
-			//	float angle = 20.0f * j;
-			//	model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-			//	glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-			//	glDrawArrays(GL_TRIANGLES, 0, 36);
-			//}
-			//RenderScene(projectionLayerViews[i]);
-			
-			
-			// glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			//RenderScene(projectionLayerViews[i]);
-			//glBindFramebuffer(GL_FRAMEBUFFER, m_swapchainFramebuffer);
-
-
-			// Swap our window every other eye for RenderDoc
-			//static int everyOther = 0;
-			//if ((everyOther++ & 1) != 0) {
-			//	glfwSwapBuffers(m_window);
-			//}
-
-			//glfwSwapBuffers(m_window);
-			//static int everyOther = 0;
-			//if ((everyOther++ & 1) != 0) {
-			//	glfwSwapBuffers(m_window);
-			//}
-
-			//glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 			XrSwapchainImageReleaseInfo releaseInfo{ XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
 			XrResult releaseSwapchainResult = xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo);
@@ -588,21 +479,6 @@ void RenderFrame()
 	frameEndInfo.layers = layers.data();
 	XrResult endResult = xrEndFrame(m_session, &frameEndInfo);
 
-	//glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-	/*GLint modelLoc = glGetUniformLocation(m_program, "model");
-	for (unsigned int j = 0; j < 10; j++)
-	{
-		glm::mat4 model = glm::mat4(1.0f);
-		model = glm::translate(model, cubePositions[j]);
-		float angle = 20.0f * j;
-		model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-
-		glDrawArrays(GL_TRIANGLES, 0, 36);
-	}*/
-
-
 }
 
 int main()
@@ -612,10 +488,8 @@ int main()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-	//glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
 	
 	m_window = glfwCreateWindow(WIDTH, HEIGHT, "OpenXR", nullptr, nullptr);
-	//glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	int screenWidth, screenHeight;
 	glfwGetFramebufferSize(m_window, &screenWidth, &screenHeight);
 	glfwSetCursorPosCallback(m_window, mouse_callback);
@@ -648,7 +522,6 @@ int main()
 	//texture stuff
 	int width, height, nChannels;
 	unsigned char* data = stbi_load("../resources/texture.png", &width, &height, &nChannels, 0);
-	GLuint texture;
 	glGenTextures(1, &texture);
 	glBindTexture(GL_TEXTURE_2D, texture);
 	if (data)
@@ -684,12 +557,6 @@ int main()
 	xrEnumerateInstanceExtensionProperties(nullptr, 0, &nInstanceExtensionProps, nullptr);
 	std::vector<XrExtensionProperties> extensionProps(nInstanceExtensionProps, {XR_TYPE_EXTENSION_PROPERTIES});
 	xrEnumerateInstanceExtensionProperties(nullptr, nInstanceExtensionProps, &nInstanceExtensionProps, extensionProps.data());
-
-	/*std::vector<char*> extensionNames(nInstanceExtensionProps);
-	for (int i = 0; i < nInstanceExtensionProps; ++i)
-	{
-		extensionNames[i] = extensionProps[i].extensionName;
-	}*/
 
 	XrInstanceCreateInfo createInfo = { XR_TYPE_INSTANCE_CREATE_INFO };
 	createInfo.createFlags = 0;
@@ -737,14 +604,6 @@ int main()
 	XrResult enumerateViewConfigViewsResult = xrEnumerateViewConfigurationViews(m_instance, systemId, m_viewConfigType, nViewConfigViews, &nViewConfigViews, viewConfigViews.data());
 
 	m_views.resize(nViewConfigViews, { XR_TYPE_VIEW });
-	//XrActionSet actionSet{ XR_NULL_HANDLE };
-	//XrActionSetCreateInfo actionSetInfo{ XR_TYPE_ACTION_SET_CREATE_INFO };
-	//strcpy_s(actionSetInfo.actionSetName, "gameplay");
-	//strcpy_s(actionSetInfo.localizedActionSetName, "Gameplay");
-	//actionSetInfo.priority = 0;
-	//xrCreateActionSet(instance, &actionSetInfo, &actionSet);
-
-	//xrCreateAction(actionSet,)
 
 	PFN_xrGetOpenGLGraphicsRequirementsKHR pfnGetOpenGLGraphicsRequirementsKHR = nullptr;
 	XrResult getPFN = xrGetInstanceProcAddr(m_instance, "xrGetOpenGLGraphicsRequirementsKHR",
@@ -752,7 +611,6 @@ int main()
 
 	XrGraphicsRequirementsOpenGLKHR reqs{ XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR };
 	XrResult getReqsResult = pfnGetOpenGLGraphicsRequirementsKHR(m_instance, systemId, &reqs);
-	//ShowWindow(hWnd, SW_MAXIMIZE);
 
 	XrGraphicsBindingOpenGLWin32KHR oglBinding = { XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR };
 	oglBinding.hDC = hDC;
@@ -859,6 +717,8 @@ int main()
 
 	glBindFramebuffer(GL_FRAMEBUFFER, m_swapchainFramebuffer);
 
+	glGenRenderbuffers(1, &rbo);
+
 
 	Shader vertexShader = Shader("../shaders/vertex.glsl", GL_VERTEX_SHADER);
 	vertexShader.Compile();
@@ -914,29 +774,6 @@ int main()
 		-0.5f,  0.5f, -0.5f,  0.0f, 1.0f
 	};
 
-	//glm::vec3 cubePositions[] = {
-	//glm::vec3(0.0f,  0.0f,  0.0f),
-	//glm::vec3(2.0f,  5.0f, -15.0f),
-	//glm::vec3(-1.5f, -2.2f, -2.5f),
-	//glm::vec3(-3.8f, -2.0f, -12.3f),
-	//glm::vec3(2.4f, -0.4f, -3.5f),
-	//glm::vec3(-1.7f,  3.0f, -7.5f),
-	//glm::vec3(1.3f, -2.0f, -2.5f),
-	//glm::vec3(1.5f,  2.0f, -2.5f),
-	//glm::vec3(1.5f,  0.2f, -1.5f),
-	//glm::vec3(-1.3f,  1.0f, -1.5f)
-	//};
-	//GLuint indices[] = {
-	//	0, 1, 2,
-	//	3, 2, 0
-	//};
-
-	//glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-	//glAttachShader(program, vShader);
-	//glAttachShader(program, fShader);
-	//glLinkProgram(program);
-	//glUseProgram(program);
 
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
@@ -945,32 +782,10 @@ int main()
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 5, (GLvoid*)0);
 
-	//GLint colorAttr = glGetAttribLocation(program, "color");
-	//glEnableVertexAttribArray(1);
-	//glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 8, (GLvoid*)(sizeof(GLfloat) * 3));
 
 	glEnableVertexAttribArray(2);
 	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 5, (GLvoid*)(sizeof(GLfloat) * 3));
 
-	// create the matrices
-	//glm::mat4 model(1.0f);
-	////model = glm::rotate(model, glm::radians(-180.0f), glm::vec3(1, 0, 0));
-	//model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
-	//glm::mat4 view = glm::mat4(1.0f);
-	//// note that we're translating the scene in the reverse direction of where we want to move
-	//view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
-
-	//glm::mat4 projection;
-	//projection = glm::perspective(glm::radians(Zoom), 800.0f / 600.0f, 0.1f, 100.0f);
-	//
-	//GLint modelLoc = glGetUniformLocation(m_program, "model");
-	//glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-	//GLint viewLoc = glGetUniformLocation(m_program, "view");
-	//glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-	//GLint projLoc = glGetUniformLocation(m_program, "projection");
-	//glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
-	//glEnable(GL_DEPTH_TEST);
 	bool requestRestart = false;
 
 	while (!glfwWindowShouldClose(m_window))
@@ -983,9 +798,6 @@ int main()
 			break;
 		}
 		glfwPollEvents();
-		//glClearColor(1, 1, 1, 1);
-		//glEnable(GL_DEPTH_TEST);
-		//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		float currentFrame = (float)glfwGetTime();
 		deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
@@ -993,42 +805,12 @@ int main()
 		if (m_sessionRunning)
 		{
 			RenderFrame();
-
 		}
 		else 
 		{
 			// Throttle loop since xrWaitFrame won't be called.
 			std::this_thread::sleep_for(std::chrono::milliseconds(250));
 		}
-		//glDrawArrays(GL_TRIANGLES, 0, 6);
-
-
-		//glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (GLvoid*)0);
-		/*model = glm::rotate(model, (float)glfwGetTimerFrequency() * glm::radians(5.0f), glm::vec3(0.5f, 1.0f, 0.0f));
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));*/
-		
-		//glm::mat4 view;
-		//view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-
-
-		//view = calculate_lookAt_matrix(cameraPos, cameraPos + cameraFront, glm::vec3(0.0f, 1.0f, 0.0f));
-
-		////view = glm::inverse(view);
-		////view = view * (glm::transpose((glm::mat4(0, 0, 0, -cameraPos.x, 0, 0, 0, -cameraPos.y, 0, 0, 0, cameraPos.z, 0, 0, 0, 1))));
-		//glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-		//projection = glm::perspective(glm::radians(Zoom), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
-		//glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
-		//for (unsigned int i = 0; i < 10; i++)
-		//{
-		//	glm::mat4 model = glm::mat4(1.0f);
-		//	model = glm::translate(model, cubePositions[i]);
-		//	float angle = 20.0f * i;
-		//	model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-		//	glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-
-		//	glDrawArrays(GL_TRIANGLES, 0, 36);
-		//}
 
 	}
 	glDeleteVertexArrays(1, &VAO);
