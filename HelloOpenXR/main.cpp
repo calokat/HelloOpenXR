@@ -326,6 +326,42 @@ void RenderScene(XrCompositionLayerProjectionView view)
 
 }
 
+void RenderView(const XrCompositionLayerProjectionView& layerView, const XrSwapchainImageBaseHeader* swapchainImage)
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, m_swapchainFramebuffer);
+	
+	const uint32_t colorTexture = reinterpret_cast<const XrSwapchainImageOpenGLKHR*>(swapchainImage)->image;
+
+	glViewport(static_cast<GLint>(layerView.subImage.imageRect.offset.x),
+		static_cast<GLint>(layerView.subImage.imageRect.offset.y),
+		static_cast<GLsizei>(layerView.subImage.imageRect.extent.width),
+		static_cast<GLsizei>(layerView.subImage.imageRect.extent.height));
+
+
+
+	glFrontFace(GL_CW);
+	glCullFace(GL_BACK);
+	glEnable(GL_CULL_FACE);
+	glEnable(GL_DEPTH_TEST);
+
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+
+	glClearColor(1, 1, 1, 1);
+	glClearDepth(1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+
+	RenderScene(layerView);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	static int everyOther = 0;
+	if ((everyOther++ & 1) != 0) {
+		glfwSwapBuffers(m_window);
+	}
+
+}
+
 bool RenderLayer(XrTime predictedDisplayTime, std::vector<XrCompositionLayerProjectionView>& projectionLayerViews,
 	XrCompositionLayerProjection& layer) {
 	XrResult res;
@@ -411,25 +447,23 @@ bool RenderLayer(XrTime predictedDisplayTime, std::vector<XrCompositionLayerProj
 
 			const XrSwapchainImageBaseHeader* const swapchainImage =
 				m_swapchainImages[viewSwapchain.handle][swapchainImageIndex];
-
+			RenderView(projectionLayerViews[i], swapchainImage);
 			//glBindFramebuffer(GL_FRAMEBUFFER, m_swapchainFramebuffer);
 
 
-			const uint32_t colorTexture = reinterpret_cast<const XrSwapchainImageOpenGLKHR*>(swapchainImage)->image;
+			//const uint32_t colorTexture = reinterpret_cast<const XrSwapchainImageOpenGLKHR*>(swapchainImage)->image;
 
-			glViewport(static_cast<GLint>(projectionLayerViews[i].subImage.imageRect.offset.x),
-				static_cast<GLint>(projectionLayerViews[i].subImage.imageRect.offset.y),
-				static_cast<GLsizei>(projectionLayerViews[i].subImage.imageRect.extent.width),
-				static_cast<GLsizei>(projectionLayerViews[i].subImage.imageRect.extent.height));
+			//glViewport(static_cast<GLint>(projectionLayerViews[i].subImage.imageRect.offset.x),
+			//	static_cast<GLint>(projectionLayerViews[i].subImage.imageRect.offset.y),
+			//	static_cast<GLsizei>(projectionLayerViews[i].subImage.imageRect.extent.width),
+			//	static_cast<GLsizei>(projectionLayerViews[i].subImage.imageRect.extent.height));
 
 			//glFrontFace(GL_CW);
 			//glCullFace(GL_BACK);
 			//glEnable(GL_CULL_FACE);
 			//glEnable(GL_DEPTH_TEST);
 
-			//const uint32_t depthTexture = GetDepthTexture(colorTexture);
-			//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTexture, 0);
-
+			
 
 			//const uint32_t depthTexture = GetDepthTexture(colorTexture);
 			//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
@@ -437,10 +471,10 @@ bool RenderLayer(XrTime predictedDisplayTime, std::vector<XrCompositionLayerProj
 
 			//glClearDepth(1.0f);
 			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 			
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+			//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
 
 			//m_graphicsPlugin->RenderView(projectionLayerViews[i], swapchainImage, m_colorSwapchainFormat, cubes);
 			// create the matrices
@@ -495,7 +529,7 @@ bool RenderLayer(XrTime predictedDisplayTime, std::vector<XrCompositionLayerProj
 			//	glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
 			//	glDrawArrays(GL_TRIANGLES, 0, 36);
 			//}
-			RenderScene(projectionLayerViews[i]);
+			//RenderScene(projectionLayerViews[i]);
 			
 			
 			// glBindFramebuffer(GL_FRAMEBUFFER, 0);
