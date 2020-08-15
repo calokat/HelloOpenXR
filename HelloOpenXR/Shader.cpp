@@ -50,6 +50,7 @@ void Shader::Compile()
 		glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length);
 		GLchar* log = new char[length + 1];
 		glGetShaderInfoLog(id, length, 0, log);
+		log[length] = '\0';
 		std::cout << log << '/n';
 		glDeleteShader(id);
 		delete[] log;

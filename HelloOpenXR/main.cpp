@@ -224,6 +224,8 @@ void HandleSessionStateChangedEvent(const XrEventDataSessionStateChanged& stateC
 		break;
 	}
 	default:
+		*exitRenderLoop = true;
+		*requestRestart = false;
 		break;
 	}
 }
@@ -313,6 +315,8 @@ void RenderScene(XrCompositionLayerProjectionView view)
 	XrMatrix4x4f toView;
 	XrPosef pose = view.pose;
 	XrVector3f scale = { 1.f, 1.f, 1.f };
+	XrVector3f posOffset = { 0, 0, 3 };
+	XrVector3f_Add(&pose.position, &pose.position, &posOffset);
 	XrMatrix4x4f_CreateTranslationRotationScale(&toView, &pose.position, &pose.orientation, &scale);
 
 	XrMatrix4x4f viewMat;
@@ -813,13 +817,6 @@ int main()
 		}
 
 	}
-	glDeleteVertexArrays(1, &VAO);
-	glDeleteBuffers(1, &VBO);
-	
-	glDeleteShader(vertexShader.GetId());
-	glDeleteShader(fragShader.GetId());
-	glDeleteProgram(m_program);
-
 	for (Swapchain s : m_swapchains)
 	{
 		xrDestroySwapchain(s.handle);
@@ -835,6 +832,15 @@ int main()
 	xrDestroySession(m_session);
 	
 	xrDestroyInstance(m_instance);
+
+
+	glDeleteVertexArrays(1, &VAO);
+	glDeleteBuffers(1, &VBO);
+	
+	glDeleteShader(vertexShader.GetId());
+	glDeleteShader(fragShader.GetId());
+	glDeleteProgram(m_program);
+
 
 
 	glfwTerminate();
