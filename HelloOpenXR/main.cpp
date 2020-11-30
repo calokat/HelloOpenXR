@@ -223,6 +223,14 @@ void HandleSessionStateChangedEvent(const XrEventDataSessionStateChanged& stateC
 		*requestRestart = true;
 		break;
 	}
+	case XR_SESSION_STATE_FOCUSED:
+	case XR_SESSION_STATE_VISIBLE:
+	case XR_SESSION_STATE_SYNCHRONIZED:
+	case XR_SESSION_STATE_IDLE: {
+		*exitRenderLoop = false;
+		*requestRestart = false;
+		break;
+	}
 	default:
 		*exitRenderLoop = true;
 		*requestRestart = false;
